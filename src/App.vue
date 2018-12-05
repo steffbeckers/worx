@@ -7,11 +7,20 @@
         <v-btn :to="{name: 'Settings'}" exact flat>Settings</v-btn>
       </v-toolbar-items>
       <v-spacer></v-spacer>
-      <span class="mr-4" v-if="user">Hi {{ firstName }}!</span>
-      <v-text-field style="max-width: 200px;" v-model="token" clearable placeholder="Token"></v-text-field>
+      <span class="mr-4" v-if="user && $vuetify.breakpoint.mdAndUp">Hi {{ firstName }}!</span>
+      <v-icon v-if="user" class="mr-4">lock_open</v-icon>
+      <v-icon v-else class="mr-4">vpn_key</v-icon>
+      <v-text-field class="pb-3" style="max-width: 250px;" v-model="token" hide-details clearable placeholder="Paste token"></v-text-field>
     </v-toolbar>
     <v-content>
-      <router-view></router-view>
+      <router-view v-if="user"></router-view>
+      <v-container v-else grid-list-xs fluid>
+        <v-layout col>
+          <v-flex xs12>
+            <v-alert :value="true" type="info">Authenticate first by providing an access token.</v-alert>
+          </v-flex>
+        </v-layout>
+      </v-container>
     </v-content>
   </v-app>
 </template>
@@ -26,7 +35,7 @@ export default {
   },
   computed: {
     firstName() {
-      return this.user.Name.split(' ').pop() || '';
+      return this.user.Name.split(" ").pop() || "";
     }
   },
   mounted() {
@@ -60,15 +69,23 @@ export default {
   },
   watch: {
     token(value) {
-      // Save to local storage
-      localStorage.setItem("token", value);
-      // Update in axios
-      this.$axios.defaults.headers.common["Authorization"] = 'Bearer ' + value;
       // When token changes, update the user
       this.user = null;
       if (window.user) {
         delete window.user;
       }
+
+      // If token is cleared, clear localStorage and do nothing else
+      if (!value) {
+        localStorage.clear();
+        return;
+      }
+
+      // Save to local storage
+      localStorage.setItem("token", value);
+      // Update in axios
+      this.$axios.defaults.headers.common["Authorization"] = "Bearer " + value;
+      
       this.getUser();
     },
     user(value) {
