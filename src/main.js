@@ -13,11 +13,28 @@ if (token) {
   Vue.prototype.$axios.defaults.headers.common['Authorization'] = 'Bearer ' + token
 }
 
-// User object to window.user global
+// User object to Vue global
 var user = localStorage.getItem('user')
 if (user) {
-  window.user = JSON.parse(user)
+  Vue.prototype.$user = JSON.parse(user)
 }
+
+// Response interceptor
+Vue.prototype.$axios.interceptors.response.use(
+  function(response) {
+    return response
+  },
+  function(error) {
+    // Log out on unauthorized
+    if (error.response && error.response.status === 401) {
+      delete Vue.prototype.user;      
+      // Nav to root
+      router.push('/')
+    }
+
+    return Promise.reject(error.response.data.error)
+  }
+)
 
 Vue.config.productionTip = false
 

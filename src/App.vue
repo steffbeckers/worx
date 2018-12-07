@@ -71,8 +71,8 @@ export default {
     token(value) {
       // When token changes, update the user
       this.user = null;
-      if (window.user) {
-        delete window.user;
+      if (this.$user) {
+        delete this.$user;
       }
 
       // If token is cleared, clear localStorage and do nothing else
@@ -92,7 +92,7 @@ export default {
       // Save to local storage
       localStorage.setItem("user", JSON.stringify(value));
       // Update in window global var
-      window.user = value;
+      this.$user = value;
     }
   },
   name: "App"

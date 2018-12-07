@@ -18,6 +18,14 @@
             :active.sync="activatedJobCodes"
             :open.sync="open"
           ></v-treeview>
+          <v-select
+            :items="tasks"
+            v-model="task"
+            label="Task"
+            class="pr-3 mt-3"
+            item-text="name"
+            hide-details
+          ></v-select>
         </v-card>
       </v-flex>
       <v-flex sm12 md9>
@@ -26,9 +34,9 @@
             <v-flex v-if="active">
               <v-card class="pa-3">
                 <div class="headline">Working on {{ active.project.name }} - {{ active.name}}</div>
-                <v-card-text
-                  class="pa-0 pt-2"
-                >Since {{ actual.From | formatTime }} - {{ thatsFromNow() }}</v-card-text>
+                <v-card-text class="pa-0 pt-2">
+                  <span v-if="actual && actual.From">Since {{ actual.From | formatTime }}</span>
+                </v-card-text>
                 <v-textarea label="Log" rows="3" v-model="actual.log"></v-textarea>
               </v-card>
             </v-flex>
@@ -57,8 +65,8 @@
                             <th style="width: 40px;">Until</th>
                             <th style="width: 45px;">Hours</th>
                             <th style="width: 20%;">Project</th>
-                            <!-- <th style="width: 20%;">Job Code</th>
-                            <th style="width: 20%;">Task</th>-->
+                            <th style="width: 20%;">Job Code</th>
+                            <th style="width: 20%;">Task</th>
                             <th>Log</th>
                           </thead>
                           <tbody>
@@ -67,8 +75,8 @@
                               <td>{{ actual.Until | formatTime }}</td>
                               <td>{{ actual.TotalHour | formatDecimal }}</td>
                               <td>{{ actual.Project.Project }}</td>
-                              <!-- <td>{{ actual.JobCode.Description }}</td>
-                              <td>{{ actual.Assignment.Description }}</td>-->
+                              <td>{{ actual.JobCode.Description }}</td>
+                              <td>{{ actual.Assignment.Description }}</td>
                               <td style="white-space: pre">{{ actual.Log }}</td>
                             </tr>
                           </tbody>
@@ -109,11 +117,12 @@ import moment from "moment";
 export default {
   data() {
     return {
-      user: window.user,
+      user: this.$user,
       showProjects: true,
       projects: JSON.parse(localStorage.getItem("projects")) || [],
       jobCodes: JSON.parse(localStorage.getItem("jobCodes")) || [],
       tasks: JSON.parse(localStorage.getItem("tasks")) || [],
+      task: JSON.parse(localStorage.getItem("task")) || {},
       activatedJobCodes:
         JSON.parse(localStorage.getItem("activatedJobCodes")) || [],
       active: null,
@@ -297,12 +306,6 @@ export default {
         .clone()
         .minute(roundedMinutes)
         .second(0);
-    },
-    thatsFromNow() {
-      if (this.actual.From) {
-        return moment(this.actual.From).fromNow();
-      }
-      return "";
     }
   },
   watch: {
@@ -315,6 +318,9 @@ export default {
     tasks(value) {
       localStorage.setItem("tasks", JSON.stringify(value));
     },
+    task(value) {
+      localStorage.setItem("task", JSON.stringify(value));
+    },
     open(value) {
       localStorage.setItem("open", JSON.stringify(value));
     },
@@ -322,8 +328,25 @@ export default {
       localStorage.setItem("activatedJobCodes", JSON.stringify(value));
       this.active = this.jobCodeById(value[0] || null);
     },
+    actuals(value) {
+      localStorage.setItem("actuals", JSON.stringify(value));
+    },
     active(value) {
-      // TODO: Add actual
+      // When active changes add current actual
+      if (this.actual && this.actual.JobCode.ID !== value.id) {
+        let now = moment();
+
+        let newActual = {
+          ...this.actual,
+          Until: this.nearestMinutes(5, now).toISOString(),
+          Project: value.project,
+          JobCode: value,
+          Assignment: this.task
+        };
+
+        // TODO: Add actual to API
+        this.actuals[0].Subgroup.unshift(newActual);
+      }
 
       // New actual from active Job code
       this.actual = {
@@ -331,8 +354,8 @@ export default {
         JobCode: { Id: value.id }
       };
     },
-    actuals(value) {
-      localStorage.setItem("actuals", JSON.stringify(value));
+    actual(value) {
+      localStorage.setItem("actual", JSON.stringify(value));
     }
   },
   name: "Ractuals"
