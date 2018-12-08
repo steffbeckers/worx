@@ -25,6 +25,7 @@
             class="pr-3 mt-3"
             item-text="name"
             hide-details
+            return-object
           ></v-select>
         </v-card>
       </v-flex>
@@ -66,7 +67,7 @@
                             <th style="width: 45px;">Hours</th>
                             <th style="width: 20%;">Project</th>
                             <th style="width: 20%;">Job Code</th>
-                            <th style="width: 20%;">Task</th>
+                            <!-- <th style="width: 20%;">Task</th> -->
                             <th>Log</th>
                           </thead>
                           <tbody>
@@ -76,7 +77,7 @@
                               <td>{{ actual.TotalHour | formatDecimal }}</td>
                               <td>{{ actual.Project.Project }}</td>
                               <td>{{ actual.JobCode.Description }}</td>
-                              <td>{{ actual.Assignment.Description }}</td>
+                              <!-- <td>{{ actual.Assignment.Description }}</td> -->
                               <td style="white-space: pre">{{ actual.Log }}</td>
                             </tr>
                           </tbody>
@@ -117,19 +118,21 @@ import moment from "moment";
 export default {
   data() {
     return {
-      user: this.$user,
       showProjects: true,
       projects: JSON.parse(localStorage.getItem("projects")) || [],
       jobCodes: JSON.parse(localStorage.getItem("jobCodes")) || [],
       tasks: JSON.parse(localStorage.getItem("tasks")) || [],
-      task: JSON.parse(localStorage.getItem("task")) || {},
+      task: JSON.parse(localStorage.getItem("task")) || {
+        id: 100,
+        name: "Realisatie/programmatie"
+      },
       activatedJobCodes:
         JSON.parse(localStorage.getItem("activatedJobCodes")) || [],
       active: null,
       open: JSON.parse(localStorage.getItem("open")) || [],
       loadingActuals: false,
       actuals: JSON.parse(localStorage.getItem("actuals")) || [],
-      actual: null
+      actual: JSON.parse(localStorage.getItem("actual")) || null
     };
   },
   mounted() {
@@ -139,13 +142,13 @@ export default {
   methods: {
     getProjects() {
       // Only if user ID is defined
-      if (!this.user || !this.user.Id) return;
+      if (!this.$user || !this.$user.Id) return;
 
       this.$axios
         .get(
           process.env.VUE_APP_API +
             "/project/GetProjects?userid=" +
-            this.user.Id
+            this.$user.Id
         )
         .then(response => {
           // console.log(JSON.parse(JSON.stringify(response.data)));
@@ -238,7 +241,7 @@ export default {
     },
     getActuals() {
       // Only if user ID is defined
-      if (!this.user || !this.user.Id) return;
+      if (!this.$user || !this.$user.Id) return;
 
       // Start loading icon
       this.loadingActuals = true;
@@ -250,7 +253,7 @@ export default {
           .format("YYYY-MM-DD"),
         To: moment().format("YYYY-MM-DD"),
         JobcodeIds: this.jobCodes.map(j => j.id),
-        UserVM: [this.user],
+        UserVM: [this.$user],
         Skip: 0,
         Take: 200
       };
@@ -269,6 +272,50 @@ export default {
           let actuals = response.data;
           this.actuals = actuals;
         });
+    },
+    createActual() {
+      // Only if user ID is defined
+      if (!this.$user || !this.$user.Id) return;
+
+      // Add local actual
+      this.actuals[0].Subgroup.unshift(this.actual);
+
+      // this.$axios
+      //   .post(
+      //     process.env.VUE_APP_API + "/actual/Create",
+      //     {
+      //       Assignment: {
+      //         Id: this.task.id
+      //       },
+      //       CompanyCarDistance: 0,
+      //       CompensationDistance: 0,
+      //       Date: this.actual.From.slice(0, -1) + "+0100", // Shit
+      //       From: this.actual.From.slice(0, -1) + "+0100", // Shit
+      //       Until: this.nearestMinutes(5, moment()).toISOString().slice(0, -1) + "+0100", // Shit
+      //       JobCode: {
+      //         JobCodeId: this.actual.JobCode.Id
+      //       },
+      //       Locked: false,
+      //       Log: this.actual.log,
+      //       Person: {
+      //         Id: this.$user.Id
+      //       },
+      //       Project: {
+      //         ProjectId: this.actual.Project.ProjectId
+      //       },
+      //       PublicTransport: false,
+      //       SocAb: false,
+      //       TotalHour: moment.duration(moment(this.actual.Until).diff(moment(this.actual.From))).asHours(),
+      //     }
+      //   )
+      //   .then(response => {
+      //     console.log(response);
+      //     // Add local actual
+      //     this.actuals[0].Subgroup.unshift(this.actual);
+      //   })
+      //   .catch(error => {
+      //     console.error(error);
+      //   });
     },
     calculateTotalHoursForDate(date) {
       let total = 0;
@@ -332,27 +379,24 @@ export default {
       localStorage.setItem("actuals", JSON.stringify(value));
     },
     active(value) {
-      // When active changes add current actual
-      if (this.actual && this.actual.JobCode.ID !== value.id) {
-        let now = moment();
-
-        let newActual = {
-          ...this.actual,
-          Until: this.nearestMinutes(5, now).toISOString(),
-          Project: value.project,
-          JobCode: value,
-          Assignment: this.task
-        };
-
-        // TODO: Add actual to API
-        this.actuals[0].Subgroup.unshift(newActual);
-      }
-
-      // New actual from active Job code
-      this.actual = {
-        From: this.nearestMinutes(5, moment()).toISOString(),
-        JobCode: { Id: value.id }
-      };
+      // First or changed active Job code
+      if (value) {
+        // When active changes add current actual
+        if (this.actual && this.actual.JobCode.Id !== value.id) {
+          this.createActual();
+        } 
+        if (this.actual && JSON.parse(localStorage.getItem("actual")).JobCode.Id !== value.id) {
+          // New actual
+          this.actual = {
+            From: this.nearestMinutes(5, moment()).toISOString(),
+            JobCode: { Id: value.id },
+            Project: { ProjectId: value.project.id }
+          };
+        }
+      } else {
+        // When deselecting or stop working (active), stop and create actual
+        this.createActual();
+      }      
     },
     actual(value) {
       localStorage.setItem("actual", JSON.stringify(value));
