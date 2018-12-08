@@ -32,13 +32,13 @@
       <v-flex sm12 md9>
         <v-container class="pa-0" grid-list-lg fluid>
           <v-layout column>
-            <v-flex v-if="active">
+            <v-flex v-if="active && actual">
               <v-card class="pa-3">
                 <div class="headline">Working on {{ active.project.name }} - {{ active.name}}</div>
                 <v-card-text class="pa-0 pt-2">
                   <span v-if="actual && actual.From">Since {{ actual.From | formatTime }}</span>
                 </v-card-text>
-                <v-textarea label="Log" rows="3" v-model="actual.log"></v-textarea>
+                <v-textarea label="Log" rows="3" v-model="actual.Log"></v-textarea>
               </v-card>
             </v-flex>
             <v-flex v-if="actuals">
@@ -109,6 +109,9 @@
   width: 100%;
   position: relative;
   top: -25px;
+}
+.v-treeview-node--leaf {
+  margin-left: 20px !important;
 }
 </style>
 
@@ -267,55 +270,64 @@ export default {
           // Stop loading icon
           this.loadingActuals = false;
 
-          // Cleanup data from API
-
-          let actuals = response.data;
-          this.actuals = actuals;
+          this.actuals = response.data;
         });
     },
     createActual() {
-      // Only if user ID is defined
-      if (!this.$user || !this.$user.Id) return;
+      // Only if user ID and actual are defined
+      if (!this.$user || !this.$user.Id || !this.actual) return;
 
-      // Add local actual
-      this.actuals[0].Subgroup.unshift(this.actual);
+      // Set actual values
+      this.actual.Until = this.nearestMinutes(5, moment()).toISOString();
+      // When From and Until are the same, add 5 minutes to Until
+      if (this.actual.From === this.actual.Until) {
+        this.actual.Until = moment(this.actual.Until)
+          .add(5, "minutes")
+          .toISOString();
+      }
+      this.actual.Assignment = {
+        Id: this.task.id,
+        Description: this.task.name
+      };
+      this.actual.TotalHour = moment
+        .duration(moment(this.actual.Until).diff(moment(this.actual.From)))
+        .asHours();
 
-      // this.$axios
-      //   .post(
-      //     process.env.VUE_APP_API + "/actual/Create",
-      //     {
-      //       Assignment: {
-      //         Id: this.task.id
-      //       },
-      //       CompanyCarDistance: 0,
-      //       CompensationDistance: 0,
-      //       Date: this.actual.From.slice(0, -1) + "+0100", // Shit
-      //       From: this.actual.From.slice(0, -1) + "+0100", // Shit
-      //       Until: this.nearestMinutes(5, moment()).toISOString().slice(0, -1) + "+0100", // Shit
-      //       JobCode: {
-      //         JobCodeId: this.actual.JobCode.Id
-      //       },
-      //       Locked: false,
-      //       Log: this.actual.log,
-      //       Person: {
-      //         Id: this.$user.Id
-      //       },
-      //       Project: {
-      //         ProjectId: this.actual.Project.ProjectId
-      //       },
-      //       PublicTransport: false,
-      //       SocAb: false,
-      //       TotalHour: moment.duration(moment(this.actual.Until).diff(moment(this.actual.From))).asHours(),
-      //     }
-      //   )
-      //   .then(response => {
-      //     console.log(response);
-      //     // Add local actual
-      //     this.actuals[0].Subgroup.unshift(this.actual);
-      //   })
-      //   .catch(error => {
-      //     console.error(error);
-      //   });
+      return this.$axios
+        .post(
+          process.env.VUE_APP_API + "/actual/Create",
+          {
+            Assignment: this.actual.Assignment,
+            CompanyCarDistance: 0,
+            CompensationDistance: 0,
+            Date: this.actual.From.slice(0, -1) + "+0100", // Shit
+            From: this.actual.From.slice(0, -1) + "+0100", // Shit
+            Until: this.actual.Until.slice(0, -1) + "+0100", // Shit
+            JobCode: {
+              JobCodeId: this.actual.JobCode.Id
+            },
+            Locked: false,
+            Log: this.actual.Log,
+            Person: {
+              Id: this.$user.Id
+            },
+            Project: {
+              ProjectId: this.actual.Project.ProjectId
+            },
+            PublicTransport: false,
+            SocAb: false,
+            TotalHour: this.actual.TotalHour,
+          }
+        )
+        .then(response => {
+          console.log(response);
+          this.getActuals();
+          // Reset the actual
+          this.actual = null;
+        })
+        .catch(error => {
+          console.error(error);
+        });
     },
     calculateTotalHoursForDate(date) {
       let total = 0;
@@ -336,7 +348,8 @@ export default {
       return someMoment
         .clone()
         .minute(roundedMinutes)
-        .second(0);
+        .second(0)
+        .milliseconds(0);
     },
     nearestMinutes(interval, someMoment) {
       const roundedMinutes =
@@ -344,7 +357,8 @@ export default {
       return someMoment
         .clone()
         .minute(roundedMinutes)
-        .second(0);
+        .second(0)
+        .milliseconds(0);
     },
     nearestFutureMinutes(interval, someMoment) {
       const roundedMinutes =
@@ -352,7 +366,8 @@ export default {
       return someMoment
         .clone()
         .minute(roundedMinutes)
-        .second(0);
+        .second(0)
+        .milliseconds(0);
     }
   },
   watch: {
@@ -378,28 +393,38 @@ export default {
     actuals(value) {
       localStorage.setItem("actuals", JSON.stringify(value));
     },
-    active(value) {
+    async active(value) {
       // First or changed active Job code
       if (value) {
         // When active changes add current actual
         if (this.actual && this.actual.JobCode.Id !== value.id) {
-          this.createActual();
-        } 
-        if (this.actual && JSON.parse(localStorage.getItem("actual")).JobCode.Id !== value.id) {
+          await this.createActual();
+        }
+        if (
+          !localStorage.getItem("actual") ||
+          JSON.parse(localStorage.getItem("actual")) === null ||
+          JSON.parse(localStorage.getItem("actual")).JobCode.Id !== value.id
+        ) {
           // New actual
           this.actual = {
             From: this.nearestMinutes(5, moment()).toISOString(),
-            JobCode: { Id: value.id },
-            Project: { ProjectId: value.project.id }
+            JobCode: { Id: value.id, Description: value.name },
+            Project: {
+              ProjectId: value.project.id,
+              Project: value.project.name
+            }
           };
         }
       } else {
         // When deselecting or stop working (active), stop and create actual
         this.createActual();
-      }      
+      }
     },
-    actual(value) {
-      localStorage.setItem("actual", JSON.stringify(value));
+    actual: {
+      handler: function(value) {
+        localStorage.setItem("actual", JSON.stringify(value));
+      },
+      deep: true
     }
   },
   name: "Ractuals"
