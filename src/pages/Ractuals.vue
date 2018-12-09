@@ -43,32 +43,51 @@
             </v-flex>
             <v-flex v-if="actuals">
               <v-card class="pa-3">
+                <v-progress-linear
+                  style="position: absolute; left: 0px; top: -15px; z-index: 100"
+                  v-if="loadingActuals || loadingBalance"
+                  :indeterminate="true"
+                ></v-progress-linear>
                 <div class="headline mb-2">Actuals
-                  <v-btn style="float: right;" flat icon @click="getActuals();">
+                  <v-btn
+                    class="ma-0"
+                    style="float: right;"
+                    flat
+                    icon
+                    @click="getActuals(); getBalance();"
+                    :disabled="loadingActuals || loadingBalance"
+                  >
                     <v-icon>cached</v-icon>
                   </v-btn>
-                  <!-- <v-progress-circular v-else class="ml-1" size="20" indeterminate color="primary"></v-progress-circular> -->
+                  <span
+                    v-if="balance"
+                    class="pr-3"
+                    style="float: right; font-size: 1.2rem; padding-top: 2px;"
+                    :style="balance < 0 ? 'color: red;' : ''"
+                  >Recup: {{ balance }} h</span>
                 </div>
                 <table class="actuals-date-table">
                   <thead>
                     <th style="width: 45px;">Date</th>
-                    <th style="width: 35px;">Total</th>
                     <th></th>
                   </thead>
                   <tbody>
                     <tr v-for="date in actuals" :key="date.Group">
-                      <td>{{ date.Group | formatDateShort }}</td>
-                      <td>{{ calculateTotalHoursForDate(date) | formatDecimal }}</td>
+                      <td>
+                        <div>{{ date.Group | formatDateShort }}</div>
+                        <div>{{ calculateTotalHoursForDate(date) | formatDecimal }}</div>
+                      </td>
                       <td class="pa-0" colspan="6">
-                        <table class="actuals-hours-table">
+                        <table class="actuals-hours-table push-up">
                           <thead>
                             <th style="width: 40px;">From</th>
                             <th style="width: 40px;">Until</th>
                             <th style="width: 45px;">Hours</th>
                             <th style="width: 20%;">Project</th>
-                            <th style="width: 20%;">Job Code</th>
-                            <!-- <th style="width: 20%;">Task</th> -->
+                            <th v-if="$vuetify.breakpoint.lgAndUp" style="width: 20%;">Job Code</th>
+                            <th v-if="$vuetify.breakpoint.xlAndUp" style="width: 20%;">Task</th>
                             <th>Log</th>
+                            <th></th>
                           </thead>
                           <tbody>
                             <tr v-for="actual in date.Subgroup" :key="actual.Id">
@@ -76,9 +95,26 @@
                               <td>{{ actual.Until | formatTime }}</td>
                               <td>{{ actual.TotalHour | formatDecimal }}</td>
                               <td>{{ actual.Project.Project }}</td>
-                              <td>{{ actual.JobCode.Description }}</td>
-                              <!-- <td>{{ actual.Assignment.Description }}</td> -->
+                              <td
+                                v-if="$vuetify.breakpoint.lgAndUp"
+                              >{{ actual.JobCode.Description }}</td>
+                              <td
+                                v-if="$vuetify.breakpoint.xlAndUp"
+                              >{{ actual.Assignment.Description }}</td>
                               <td style="white-space: pre">{{ actual.Log }}</td>
+                              <th>
+                                <v-btn
+                                  style="float: right;"
+                                  small
+                                  class="ma-0 delete-button"
+                                  flat
+                                  icon
+                                  @click="deleteActual(actual);"
+                                  color="grey lighter-1"
+                                >
+                                  <v-icon>delete</v-icon>
+                                </v-btn>
+                              </th>
                             </tr>
                           </tbody>
                         </table>
@@ -107,11 +143,16 @@
 }
 .actuals-hours-table {
   width: 100%;
+}
+.push-up {
   position: relative;
   top: -25px;
 }
+</style>
+
+<style>
 .v-treeview-node--leaf {
-  margin-left: 20px !important;
+  margin-left: 30px !important;
 }
 </style>
 
@@ -135,12 +176,15 @@ export default {
       open: JSON.parse(localStorage.getItem("open")) || [],
       loadingActuals: false,
       actuals: JSON.parse(localStorage.getItem("actuals")) || [],
-      actual: JSON.parse(localStorage.getItem("actual")) || null
+      actual: JSON.parse(localStorage.getItem("actual")) || null,
+      loadingBalance: false,
+      balance: parseFloat(localStorage.getItem("balance"), 2) || null
     };
   },
   mounted() {
     this.getProjects();
     this.getActuals();
+    this.getBalance();
   },
   methods: {
     getProjects() {
@@ -246,7 +290,7 @@ export default {
       // Only if user ID is defined
       if (!this.$user || !this.$user.Id) return;
 
-      // Start loading icon
+      // Start loading
       this.loadingActuals = true;
 
       let postBody = {
@@ -267,7 +311,7 @@ export default {
           postBody
         )
         .then(response => {
-          // Stop loading icon
+          // Stop loading
           this.loadingActuals = false;
 
           this.actuals = response.data;
@@ -294,38 +338,74 @@ export default {
         .asHours();
 
       return this.$axios
-        .post(
-          process.env.VUE_APP_API + "/actual/Create",
-          {
-            Assignment: this.actual.Assignment,
-            CompanyCarDistance: 0,
-            CompensationDistance: 0,
-            Date: this.actual.From.slice(0, -1) + "+0100", // Shit
-            From: this.actual.From.slice(0, -1) + "+0100", // Shit
-            Until: this.actual.Until.slice(0, -1) + "+0100", // Shit
-            JobCode: {
-              JobCodeId: this.actual.JobCode.Id
-            },
-            Locked: false,
-            Log: this.actual.Log,
-            Person: {
-              Id: this.$user.Id
-            },
-            Project: {
-              ProjectId: this.actual.Project.ProjectId
-            },
-            PublicTransport: false,
-            SocAb: false,
-            TotalHour: this.actual.TotalHour,
-          }
-        )
-        .then(response => {
+        .post(process.env.VUE_APP_API + "/actual/Create", {
+          Assignment: this.actual.Assignment,
+          CompanyCarDistance: 0,
+          CompensationDistance: 0,
+          Date:
+            moment(this.actual.From)
+              .add(1, "hours")
+              .toISOString()
+              .slice(0, -1) + "+0100", // Shit
+          From:
+            moment(this.actual.From)
+              .add(1, "hours")
+              .toISOString()
+              .slice(0, -1) + "+0100", // Shit
+          Until:
+            moment(this.actual.Until)
+              .add(1, "hours")
+              .toISOString()
+              .slice(0, -1) + "+0100", // Shit
+          JobCode: {
+            JobCodeId: this.actual.JobCode.Id
+          },
+          Locked: false,
+          Log: this.actual.Log,
+          Person: {
+            Id: this.$user.Id
+          },
+          Project: {
+            ProjectId: this.actual.Project.ProjectId
+          },
+          PublicTransport: false,
+          SocAb: false,
+          TotalHour: this.actual.TotalHour
+        })
+        .then(() => {
           this.getActuals();
           // Reset the actual
           this.actual = null;
+        });
+    },
+    deleteActual(actual) {
+      // Only if user ID and actual are defined
+      if (!this.$user || !this.$user.Id || !actual) return;
+
+      if (confirm(this.$user.Name.split(" ").pop() + ", are you sure?")) {
+        this.$axios
+          .delete(process.env.VUE_APP_API + "/actual/Delete/" + actual.Id)
+          .then(() => {
+            this.getActuals();
+          });
+      }
+    },
+    getBalance() {
+      // Only if user ID is defined
+      if (!this.$user || !this.$user.Id) return;
+
+      // Start loading
+      this.loadingBalance = true;
+
+      this.$axios
+        .post(process.env.VUE_APP_API + "/actual/GetRecupInfo", {
+          id: this.$user.Id
         })
-        .catch(error => {
-          console.error(error);
+        .then(response => {
+          // Stop loading
+          this.loadingBalance = false;
+
+          this.balance = response.data.Data.CalculatedTime;
         });
     },
     calculateTotalHoursForDate(date) {
@@ -424,6 +504,9 @@ export default {
         localStorage.setItem("actual", JSON.stringify(value));
       },
       deep: true
+    },
+    balance(value) {
+      localStorage.setItem("balance", JSON.stringify(value));
     }
   },
   name: "Ractuals"
