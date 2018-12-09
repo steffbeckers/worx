@@ -36,7 +36,8 @@
               <v-card class="pa-3">
                 <div class="headline">Working on {{ active.project.name }} - {{ active.name}}</div>
                 <v-card-text class="pa-0 pt-2">
-                  <span v-if="actual && actual.From">Since {{ actual.From | formatTime }}</span>
+                  <span v-if="actual && actual.From">Since {{ actual.From | formatTime }}<span v-if="timeWorkingOn"> - {{ timeWorkingOn }}</span></span>
+                  <v-btn class="ma-0 ml-2" small flat @click="activatedJobCodes = []">Stop</v-btn>
                 </v-card-text>
                 <v-textarea label="Log" rows="3" v-model="actual.Log"></v-textarea>
               </v-card>
@@ -178,13 +179,20 @@ export default {
       actuals: JSON.parse(localStorage.getItem("actuals")) || [],
       actual: JSON.parse(localStorage.getItem("actual")) || null,
       loadingBalance: false,
-      balance: parseFloat(localStorage.getItem("balance"), 2) || null
+      balance: parseFloat(localStorage.getItem("balance"), 2) || null,
+      timeWorkingOn: null,
+      timeWorkingOnInterval: null
     };
   },
   mounted() {
     this.getProjects();
     this.getActuals();
     this.getBalance();
+
+    this.timeWorkingOnInterval = setInterval(this.updateCurrentTimeWorkingOn, 1000);
+  },
+  destroyed: function() {
+    clearInterval(this.timeWorkingOnInterval)
   },
   methods: {
     getProjects() {
@@ -447,6 +455,14 @@ export default {
         .minute(roundedMinutes)
         .second(0)
         .milliseconds(0);
+    },
+    updateCurrentTimeWorkingOn() {
+      if (this.actual && this.actual.From) {
+        let duration = moment.duration(moment().diff(moment(this.actual.From)));
+        this.timeWorkingOn = moment.utc(duration.asMilliseconds()).format("HH:mm:ss");
+      } else {
+        this.timeWorkingOn = null;
+      }
     }
   },
   watch: {
