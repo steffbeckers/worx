@@ -7,7 +7,12 @@
             @click="showProjects = !showProjects"
             style="cursor: pointer;"
             class="headline"
-          >Projects</div>
+          >Projects
+            <v-btn flat icon class="ma-0 mr-3" style="float: right;">
+              <v-icon v-if="showProjects">expand_less</v-icon>
+              <v-icon v-else>expand_more</v-icon>
+            </v-btn>
+          </div>
           <v-treeview
             class="mt-2"
             v-if="projects.length > 0 && showProjects"
@@ -36,8 +41,18 @@
               <v-card class="pa-3">
                 <div class="headline">Working on {{ active.project.name }} - {{ active.name}}</div>
                 <v-card-text class="pa-0 pt-2">
-                  <span v-if="actual && actual.From">Since {{ actual.From | formatTime }}<span v-if="timeWorkingOn"> - {{ timeWorkingOn }}</span></span>
-                  <v-btn class="ma-0 ml-2" small flat @click="activatedJobCodes = []">Stop</v-btn>
+                  <div class="d-inline-block" v-if="actual && actual.From">
+                    From {{ actual.From | formatTime }}
+                    <span
+                      v-if="timeWorkingOn"
+                    >{{ timeWorkingOn }}</span>
+                  </div>
+                  <v-btn
+                    class="ma-0 ml-2 d-inline-block"
+                    small
+                    flat
+                    @click="activatedJobCodes = []"
+                  >Stop</v-btn>
                 </v-card-text>
                 <v-textarea label="Log" rows="3" v-model="actual.Log"></v-textarea>
               </v-card>
@@ -189,10 +204,13 @@ export default {
     this.getActuals();
     this.getBalance();
 
-    this.timeWorkingOnInterval = setInterval(this.updateCurrentTimeWorkingOn, 1000);
+    this.timeWorkingOnInterval = setInterval(
+      this.updateCurrentTimeWorkingOn,
+      1000
+    );
   },
   destroyed: function() {
-    clearInterval(this.timeWorkingOnInterval)
+    clearInterval(this.timeWorkingOnInterval);
   },
   methods: {
     getProjects() {
@@ -324,6 +342,9 @@ export default {
 
           this.actuals = response.data;
         });
+
+      // Refresh recup balance
+      this.getBalance();
     },
     createActual() {
       // Only if user ID and actual are defined
@@ -458,8 +479,32 @@ export default {
     },
     updateCurrentTimeWorkingOn() {
       if (this.actual && this.actual.From) {
-        let duration = moment.duration(moment().diff(moment(this.actual.From)));
-        this.timeWorkingOn = moment.utc(duration.asMilliseconds()).format("HH:mm:ss");
+        let duration;
+        let now = moment();
+        let from = moment(this.actual.From);
+
+        this.timeWorkingOn = "";
+
+        if (this.nearestMinutes(5, now) > from) {
+          this.timeWorkingOn +=
+            "- " + this.nearestMinutes(5, now).format("HH:mm") + " (";
+        } else {
+          this.timeWorkingOn += "(";
+        }
+
+        if (now >= from) {
+          duration = moment.duration(now.diff(from));
+          this.timeWorkingOn += moment
+            .utc(duration.asMilliseconds())
+            .format("HH:mm:ss");
+        } else {
+          duration = moment.duration(from.diff(now));
+          this.timeWorkingOn += moment
+            .utc(duration.asMilliseconds())
+            .format("-mm:ss");
+        }
+
+        this.timeWorkingOn += ")";
       } else {
         this.timeWorkingOn = null;
       }
