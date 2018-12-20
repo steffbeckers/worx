@@ -35,7 +35,10 @@ export default {
   },
   computed: {
     firstName() {
-      return this.user.Name.split(" ").pop() || "";
+      if (this.user && this.user.Name) {
+        return this.user.Name.split(" ").pop() || "";
+      }
+      return null;
     }
   },
   mounted() {
@@ -57,9 +60,7 @@ export default {
       this.$axios
         .get(process.env.VUE_APP_API + "/User/GetUser")
         .then(response => {
-          this.user = response.data;
-          // Force reload?
-          // location.reload();
+          this.user = response.data.Data;
         })
         .catch(() => {
           // When error, the token must be incorrect or became invalid

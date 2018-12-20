@@ -91,11 +91,14 @@
                     <tr v-for="date in actuals" :key="date.Group">
                       <td>
                         <div>{{ date.Group | formatDateShort }}</div>
-                        <div>{{ calculateTotalHoursForDate(date) | formatDecimal }}</div>
+                        <div v-if="!date.Subgroup[0].Duration">{{ calculateTotalHoursForDate(date) | formatDecimal }}</div>
                       </td>
                       <td class="pa-0" colspan="6">
                         <table class="actuals-hours-table push-up">
-                          <thead>
+                          <thead v-if="date.Subgroup[0].Duration">
+                            <th>Absence</th>
+                          </thead>
+                          <thead v-if="!date.Subgroup[0].Duration">
                             <th style="width: 40px;">From</th>
                             <th style="width: 40px;">Until</th>
                             <th style="width: 45px;">Hours</th>
@@ -106,7 +109,23 @@
                             <th></th>
                           </thead>
                           <tbody>
-                            <tr v-for="actual in date.Subgroup" :key="actual.Id">
+                            <!-- Absence -->
+                            <tr v-if="actual.Duration" v-for="actual in date.Subgroup" :key="actual.Id">
+                              <td>
+                                {{ actual.Title }}
+                                <span v-if="actual.Title === 'Jaarlijks verlof - Betaald'">😎</span>
+                                <span v-else-if="actual.Title === 'ZK'">
+                                  <span v-if="Math.ceil(Math.random() * 6) === 1">😷</span>
+                                  <span v-if="Math.ceil(Math.random() * 6) === 2">🤒</span>
+                                  <span v-if="Math.ceil(Math.random() * 6) === 3">🤕</span>
+                                  <span v-if="Math.ceil(Math.random() * 6) === 4">🤢</span>
+                                  <span v-if="Math.ceil(Math.random() * 6) === 5">🤮</span>
+                                  <span v-if="Math.ceil(Math.random() * 6) === 6">🤧</span>
+                                </span>
+                              </td>
+                            </tr>
+                            <!-- Actual -->
+                            <tr v-if="!actual.Duration" v-for="actual in date.Subgroup" :key="actual.Id">
                               <td>{{ actual.From | formatTime }}</td>
                               <td>{{ actual.Until | formatTime }}</td>
                               <td>{{ actual.TotalHour | formatDecimal }}</td>
@@ -224,13 +243,13 @@ export default {
             this.$user.Id
         )
         .then(response => {
-          // console.log(JSON.parse(JSON.stringify(response.data)));
+          // console.log(JSON.parse(JSON.stringify(response.data.Data)));
 
           // Cleanup data from API
 
           // TASKS
           // Convert
-          let tasks = response.data[0].JobCodes[0].Assignments.map(t => {
+          let tasks = response.data.Data[0].JobCodes[0].Assignments.map(t => {
             return {
               id: t.Id,
               name:
@@ -260,7 +279,7 @@ export default {
 
           // PROJECTS
           // Convert
-          let projects = response.data.map(p => {
+          let projects = response.data.Data.map(p => {
             return {
               id: p.ProjectId,
               name: p.Project,
@@ -340,7 +359,7 @@ export default {
           // Stop loading
           this.loadingActuals = false;
 
-          this.actuals = response.data;
+          this.actuals = response.data.Data;
         });
 
       // Refresh recup balance

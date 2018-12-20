@@ -32,7 +32,7 @@ Vue.prototype.$axios.interceptors.response.use(
       router.push('/')
     }
 
-    return Promise.reject(error.response.data.error)
+    return Promise.reject(error.response.data.Data.error)
   }
 )
 
