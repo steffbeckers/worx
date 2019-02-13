@@ -80,7 +80,7 @@
                     class="pr-3"
                     style="float: right; font-size: 1.2rem; padding-top: 2px;"
                     :style="balance < 0 ? 'color: red;' : ''"
-                  >Recup: {{ balance }} h</span>
+                  >Recup: {{ displayBalance }} h</span>
                 </div>
                 <table class="actuals-date-table">
                   <thead>
@@ -141,13 +141,24 @@
                                 <v-btn
                                   style="float: right;"
                                   small
-                                  class="ma-0 delete-button"
+                                  class="ma-0"
                                   flat
                                   icon
                                   @click="deleteActual(actual);"
                                   color="grey lighter-1"
                                 >
                                   <v-icon>delete</v-icon>
+                                </v-btn>
+                                <v-btn
+                                  style="float: right;"
+                                  small
+                                  class="ma-0"
+                                  flat
+                                  icon
+                                  @click="copyActual(actual);"
+                                  color="grey lighter-1"
+                                >
+                                  <v-icon style="font-size: 20px;">filter_none</v-icon>
                                 </v-btn>
                               </th>
                             </tr>
@@ -213,10 +224,23 @@ export default {
       actuals: JSON.parse(localStorage.getItem("actuals")) || [],
       actual: JSON.parse(localStorage.getItem("actual")) || null,
       loadingBalance: false,
-      balance: parseFloat(localStorage.getItem("balance"), 2) || null,
+      balance: localStorage.getItem("balance") || null,
+      durationWorkingOn: null,
       timeWorkingOn: null,
       timeWorkingOnInterval: null
     };
+  },
+  computed: {
+    displayBalance: function() {
+      if (!this.balance) { return 0; }
+
+      // If counting, display as well
+      if (this.durationWorkingOn && this.durationWorkingOn.asSeconds()) {
+        return parseFloat(this.balance + this.durationWorkingOn.asSeconds() / 3600).toFixed(2);
+      }
+
+      return parseFloat(this.balance).toFixed(2);
+    }
   },
   mounted() {
     this.getProjects();
@@ -424,7 +448,22 @@ export default {
           this.getActuals();
           // Reset the actual
           this.actual = null;
+          // Cleanup
+          this.cleanup();
         });
+    },
+    copyActual(actual) {
+      // Only if user ID and actual are defined
+      if (!this.$user || !this.$user.Id || !actual) return;
+
+      // Copy log field
+      if (this.actual === null) {
+        this.actual = {};
+      }
+      this.actual.Log = actual.Log;
+
+      // Set active, trigger updates in data
+      this.activatedJobCodes = [actual.JobCode.JobCodeId];
     },
     deleteActual(actual) {
       // Only if user ID and actual are defined
@@ -511,13 +550,17 @@ export default {
           this.timeWorkingOn += "(";
         }
 
+        // Future
         if (now >= from) {
           duration = moment.duration(now.diff(from));
+          this.durationWorkingOn = duration;
           this.timeWorkingOn += moment
             .utc(duration.asMilliseconds())
             .format("HH:mm:ss");
         } else {
+          // Past
           duration = moment.duration(from.diff(now));
+          this.durationWorkingOn = duration;
           this.timeWorkingOn += moment
             .utc(duration.asMilliseconds())
             .format("-mm:ss");
@@ -527,6 +570,10 @@ export default {
       } else {
         this.timeWorkingOn = null;
       }
+    },
+    cleanup() {
+      this.durationWorkingOn = null;
+      this.timeWorkingOn = null;
     }
   },
   watch: {
@@ -548,6 +595,13 @@ export default {
     activatedJobCodes(value) {
       localStorage.setItem("activatedJobCodes", JSON.stringify(value));
       this.active = this.jobCodeById(value[0] || null);
+
+      // Open project in sidenav, if not yet
+      if (this.open && value.length > 0) {
+        if (this.open.indexOf(this.active.project.id) === -1) {
+          this.open.push(this.active.project.id);
+        }
+      }
     },
     actuals(value) {
       localStorage.setItem("actuals", JSON.stringify(value));
@@ -556,7 +610,7 @@ export default {
       // First or changed active Job code
       if (value) {
         // When active changes add current actual
-        if (this.actual && this.actual.JobCode.Id !== value.id) {
+        if (this.actual && this.actual.JobCode && this.actual.JobCode.Id !== value.id) {
           await this.createActual();
         }
         if (
@@ -564,6 +618,9 @@ export default {
           JSON.parse(localStorage.getItem("actual")) === null ||
           JSON.parse(localStorage.getItem("actual")).JobCode.Id !== value.id
         ) {
+          // Save log (Copy actual)
+          let log = this.actual.Log;
+
           // New actual
           this.actual = {
             From: this.nearestMinutes(5, moment()).toISOString(),
@@ -573,10 +630,28 @@ export default {
               Project: value.project.name
             }
           };
+
+          // Update log
+          if (log) {
+            this.actual.Log = log;
+          }
         }
       } else {
         // When deselecting or stop working (active), stop and create actual
-        this.createActual();
+        // Only if actual lasted longer than 5 minutes (setting?)
+        let duration;
+        let now = moment();
+        let from = moment(this.actual.From);
+        duration = moment.duration(now.diff(from));
+
+        if (duration.asMinutes() > 5) {
+          this.createActual();
+        } else {
+          // Reset the actual
+          this.actual = null;
+          // Cleanup
+          this.cleanup();
+        }
       }
     },
     actual: {
