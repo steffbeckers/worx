@@ -110,11 +110,11 @@
                           </thead>
                           <tbody>
                             <!-- Absence -->
-                            <tr v-if="actual.Duration" v-for="actual in date.Subgroup" :key="actual.Id">
+                            <tr v-if="localActual.Duration" v-for="localActual in date.Subgroup" :key="localActual.Id">
                               <td>
-                                {{ actual.Title }}
-                                <span v-if="actual.Title === 'Jaarlijks verlof - Betaald'">😎</span>
-                                <span v-else-if="actual.Title === 'ZK'">
+                                {{ localActual.Title }}
+                                <span v-if="localActual.Title === 'Jaarlijks verlof - Betaald'">😎</span>
+                                <span v-else-if="localActual.Title === 'ZK'">
                                   <span v-if="Math.ceil(Math.random() * 6) === 1">😷</span>
                                   <span v-if="Math.ceil(Math.random() * 6) === 2">🤒</span>
                                   <span v-if="Math.ceil(Math.random() * 6) === 3">🤕</span>
@@ -125,18 +125,18 @@
                               </td>
                             </tr>
                             <!-- Actual -->
-                            <tr v-if="!actual.Duration" v-for="actual in date.Subgroup" :key="actual.Id">
-                              <td>{{ actual.From | formatTime }}</td>
-                              <td>{{ actual.Until | formatTime }}</td>
-                              <td>{{ actual.TotalHour | formatDecimal }}</td>
-                              <td>{{ actual.Project.Project }}</td>
+                            <tr v-if="!localActual.Duration" v-for="localActual in date.Subgroup" :key="localActual.Id">
+                              <td>{{ localActual.From | formatTime }}</td>
+                              <td>{{ localActual.Until | formatTime }}</td>
+                              <td>{{ localActual.TotalHour | formatDecimal }}</td>
+                              <td>{{ localActual.Project.Project }}</td>
                               <td
                                 v-if="$vuetify.breakpoint.lgAndUp"
-                              >{{ actual.JobCode.Description }}</td>
+                              >{{ localActual.JobCode.Description }}</td>
                               <td
                                 v-if="$vuetify.breakpoint.xlAndUp"
-                              >{{ actual.Assignment.Description }}</td>
-                              <td style="white-space: pre">{{ actual.Log }}</td>
+                              >{{ localActual.Assignment.Description }}</td>
+                              <td style="white-space: pre">{{ localActual.Log }}</td>
                               <th>
                                 <v-btn
                                   style="float: right;"
@@ -144,7 +144,7 @@
                                   class="ma-0"
                                   flat
                                   icon
-                                  @click="deleteActual(actual);"
+                                  @click="deleteActual(localActual);"
                                   color="grey lighter-1"
                                 >
                                   <v-icon>delete</v-icon>
@@ -155,7 +155,7 @@
                                   class="ma-0"
                                   flat
                                   icon
-                                  @click="copyActual(actual);"
+                                  @click="copyActual(localActual);"
                                   color="grey lighter-1"
                                 >
                                   <v-icon style="font-size: 20px;">filter_none</v-icon>
@@ -235,7 +235,7 @@ export default {
       if (!this.balance) { return 0; }
 
       // If counting, display as well
-      if (this.durationWorkingOn && this.durationWorkingOn.asSeconds()) {
+      if (this.durationWorkingOn && this.durationWorkingOn.asSeconds() > 0) {
         return parseFloat(this.balance + this.durationWorkingOn.asSeconds() / 3600).toFixed(2);
       }
 
@@ -597,6 +597,9 @@ export default {
       this.active = this.jobCodeById(value[0] || null);
 
       // Open project in sidenav, if not yet
+      if (!this.showProjects) {
+        this.showProjects = true;
+      }
       if (this.open && value.length > 0) {
         if (this.open.indexOf(this.active.project.id) === -1) {
           this.open.push(this.active.project.id);
@@ -619,7 +622,7 @@ export default {
           JSON.parse(localStorage.getItem("actual")).JobCode.Id !== value.id
         ) {
           // Save log (Copy actual)
-          let log = this.actual.Log;
+          let log = this.actual && this.actual.Log;
 
           // New actual
           this.actual = {
