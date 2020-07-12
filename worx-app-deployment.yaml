@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worx-app
+  namespace: worx
+  labels:
+    app: worx-app
+    release: worx-app
+spec:
+  selector:
+    matchLabels:
+      app: worx-app
+      release: worx-app
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: worx-app
+        release: worx-app
+        tier: frontend
+    spec:
+      imagePullSecrets:
+        - name: dockerconfig
+      containers:
+        - image: registry.gitlab.com/steffbeckers/worx
+          name: worx-app
+          ports:
+            - containerPort: 80
+              name: worx-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worx-app
+  namespace: worx
+  labels:
+    app: worx-app
+    release: worx-app
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: worx-app
+    release: worx-app
+    tier: frontend
