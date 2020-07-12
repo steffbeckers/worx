@@ -13,6 +13,8 @@
               <v-icon v-else>expand_more</v-icon>
             </v-btn>
           </div>
+          <div class="mt-2" v-if="!active">Select a project job code to start a new actual.</div>
+          <div class="mt-2" v-if="active">Select another project job code to close the current actual and start a new one.</div>
           <v-treeview
             class="mt-2"
             v-if="projects.length > 0 && showProjects"
@@ -39,10 +41,10 @@
           <v-layout column>
             <v-flex v-if="active && actual">
               <v-card class="pa-3">
-                <div class="headline">Working on {{ active.project.name }} - {{ active.name}}</div>
-                <v-card-text class="pa-0 pt-2">
+                <div class="headline">Currently working on {{ active.project.name }} - {{ active.name}}</div>
+                <v-card-text class="pa-0 pt-2 pb-2">
                   <div class="d-inline-block" v-if="actual && actual.From">
-                    From {{ actual.From | formatTime }}
+                    Started on {{ actual.From | formatTime }}
                     <span
                       v-if="timeWorkingOn"
                     >{{ timeWorkingOn }}</span>
@@ -54,6 +56,8 @@
                     @click="activatedJobCodes = []"
                   >Stop</v-btn>
                 </v-card-text>
+                <h3>Actual</h3>
+                <v-text-field label="Add new log line" v-model="newLogLine" @keyup.enter="addNewLogLine()"></v-text-field>
                 <v-textarea label="Log" rows="3" v-model="actual.Log"></v-textarea>
               </v-card>
             </v-flex>
@@ -214,10 +218,9 @@ export default {
       tasks: JSON.parse(localStorage.getItem("tasks")) || [],
       task: JSON.parse(localStorage.getItem("task")) || {
         id: 100,
-        name: "Realisatie/programmatie"
+        name: "Realisatie/programmatie",
       },
-      activatedJobCodes:
-        JSON.parse(localStorage.getItem("activatedJobCodes")) || [],
+      activatedJobCodes: JSON.parse(localStorage.getItem("activatedJobCodes")) || [],
       active: null,
       open: JSON.parse(localStorage.getItem("open")) || [],
       loadingActuals: false,
@@ -227,12 +230,15 @@ export default {
       balance: localStorage.getItem("balance") || null,
       durationWorkingOn: null,
       timeWorkingOn: null,
-      timeWorkingOnInterval: null
+      timeWorkingOnInterval: null,
+      newLogLine: null,
     };
   },
   computed: {
     displayBalance: function() {
-      if (!this.balance) { return 0; }
+      if (!this.balance) {
+        return 0;
+      }
 
       // If counting, display as well
       if (this.durationWorkingOn && this.durationWorkingOn.asSeconds() > 0) {
@@ -240,17 +246,14 @@ export default {
       }
 
       return parseFloat(this.balance).toFixed(2);
-    }
+    },
   },
   mounted() {
     this.getProjects();
     this.getActuals();
     this.getBalance();
 
-    this.timeWorkingOnInterval = setInterval(
-      this.updateCurrentTimeWorkingOn,
-      1000
-    );
+    this.timeWorkingOnInterval = setInterval(this.updateCurrentTimeWorkingOn, 1000);
   },
   destroyed: function() {
     clearInterval(this.timeWorkingOnInterval);
@@ -260,98 +263,81 @@ export default {
       // Only if user ID is defined
       if (!this.$user || !this.$user.Id) return;
 
-      this.$axios
-        .get(
-          process.env.VUE_APP_API +
-            "/project/GetProjects?userid=" +
-            this.$user.Id
-        )
-        .then(response => {
-          // console.log(JSON.parse(JSON.stringify(response.data.Data)));
+      this.$axios.get(process.env.VUE_APP_API + "/project/GetProjects?userid=" + this.$user.Id).then((response) => {
+        // console.log(JSON.parse(JSON.stringify(response.data.Data)));
 
-          // Cleanup data from API
+        // Cleanup data from API
 
-          // TASKS
-          // Convert
-          let tasks = response.data.Data[0].JobCodes[0].Assignments.map(t => {
-            return {
-              id: t.Id,
-              name:
-                t.Description.charAt(0).toUpperCase() +
-                t.Description.toLowerCase().slice(1)
-            };
-          });
-
-          // Sort
-          tasks = tasks.sort((a, b) =>
-            a.name.toLowerCase() > b.name.toLowerCase()
-              ? 1
-              : b.name.toLowerCase() > a.name.toLowerCase()
-              ? -1
-              : 0
-          );
-
-          // Default first task => 100 === "Realisatie/programmatie"
-          // TODO Add setting
-          tasks.forEach((t, i) => {
-            if (t.id === 100) {
-              var item = tasks.splice(i, 1); // Remove item
-              tasks.unshift(item[0]); // Add item to front
-            }
-          });
-          this.tasks = tasks;
-
-          // PROJECTS
-          // Convert
-          let projects = response.data.Data.map(p => {
-            return {
-              id: p.ProjectId,
-              name: p.Project,
-              jobCodes: p.JobCodes.map(j => {
-                return {
-                  id: j.JobCodeId,
-                  name: j.Description,
-                  description: j.LongDescription
-                };
-              })
-            };
-          });
-
-          // Sort
-          projects = projects.sort((a, b) =>
-            a.name.toLowerCase() > b.name.toLowerCase()
-              ? 1
-              : b.name.toLowerCase() > a.name.toLowerCase()
-              ? -1
-              : 0
-          );
-
-          let jobCodes = [];
-          projects.forEach(p => {
-            p.jobCodes = p.jobCodes.sort((a, b) =>
-              a.name.toLowerCase() > b.name.toLowerCase()
-                ? 1
-                : b.name.toLowerCase() > a.name.toLowerCase()
-                ? -1
-                : 0
-            );
-
-            // Also add jobCodes of all projects to global list in this forEach
-            jobCodes.push(
-              ...p.jobCodes.map(j => {
-                return { ...j, project: { id: p.id, name: p.name } };
-              })
-            );
-          });
-          this.projects = projects;
-          this.jobCodes = jobCodes;
+        // TASKS
+        // Convert
+        let tasks = response.data.Data[0].JobCodes[0].Assignments.map((t) => {
+          return {
+            id: t.Id,
+            name: t.Description.charAt(0).toUpperCase() + t.Description.toLowerCase().slice(1),
+          };
         });
+
+        // Sort
+        tasks = tasks.sort(
+          (a, b) =>
+            a.name.toLowerCase() > b.name.toLowerCase() ? 1 : b.name.toLowerCase() > a.name.toLowerCase() ? -1 : 0
+        );
+
+        // Default first task => 100 === "Realisatie/programmatie"
+        // TODO Add setting
+        tasks.forEach((t, i) => {
+          if (t.id === 100) {
+            var item = tasks.splice(i, 1); // Remove item
+            tasks.unshift(item[0]); // Add item to front
+          }
+        });
+        this.tasks = tasks;
+
+        // PROJECTS
+        // Convert
+        let projects = response.data.Data.map((p) => {
+          return {
+            id: p.ProjectId,
+            name: p.Project,
+            jobCodes: p.JobCodes.map((j) => {
+              return {
+                id: j.JobCodeId,
+                name: j.Description,
+                description: j.LongDescription,
+              };
+            }),
+          };
+        });
+
+        // Sort
+        projects = projects.sort(
+          (a, b) =>
+            a.name.toLowerCase() > b.name.toLowerCase() ? 1 : b.name.toLowerCase() > a.name.toLowerCase() ? -1 : 0
+        );
+
+        let jobCodes = [];
+        projects.forEach((p) => {
+          p.jobCodes = p.jobCodes.sort(
+            (a, b) =>
+              a.name.toLowerCase() > b.name.toLowerCase() ? 1 : b.name.toLowerCase() > a.name.toLowerCase() ? -1 : 0
+          );
+
+          // Also add jobCodes of all projects to global list in this forEach
+          jobCodes.push(
+            ...p.jobCodes.map((j) => {
+              return { ...j, project: { id: p.id, name: p.name } };
+            })
+          );
+        });
+        this.projects = projects;
+        this.jobCodes = jobCodes;
+      });
     },
     jobCodeById(id) {
       if (!id) {
         return id;
       }
-      return this.jobCodes.filter(j => {
+      return this.jobCodes.filter((j) => {
         return j.id === id;
       })[0];
     },
@@ -368,23 +354,18 @@ export default {
           .add(-2, "days")
           .format("YYYY-MM-DD"),
         To: moment().format("YYYY-MM-DD"),
-        JobcodeIds: this.jobCodes.map(j => j.id),
+        JobcodeIds: this.jobCodes.map((j) => j.id),
         UserVM: [this.$user],
         Skip: 0,
-        Take: 200
+        Take: 200,
       };
 
-      this.$axios
-        .post(
-          process.env.VUE_APP_API + "/Actual/GetActualsAndAbsents",
-          postBody
-        )
-        .then(response => {
-          // Stop loading
-          this.loadingActuals = false;
+      this.$axios.post(process.env.VUE_APP_API + "/Actual/GetActualsAndAbsents", postBody).then((response) => {
+        // Stop loading
+        this.loadingActuals = false;
 
-          this.actuals = response.data.Data;
-        });
+        this.actuals = response.data.Data;
+      });
 
       // Refresh recup balance
       this.getBalance();
@@ -403,46 +384,41 @@ export default {
       }
       this.actual.Assignment = {
         Id: this.task.id,
-        Description: this.task.name
+        Description: this.task.name,
       };
-      this.actual.TotalHour = moment
-        .duration(moment(this.actual.Until).diff(moment(this.actual.From)))
-        .asHours();
+      this.actual.TotalHour = moment.duration(moment(this.actual.Until).diff(moment(this.actual.From))).asHours();
 
       return this.$axios
         .post(process.env.VUE_APP_API + "/actual/Create", {
           Assignment: this.actual.Assignment,
           CompanyCarDistance: 0,
           CompensationDistance: 0,
-          Date:
-            moment(this.actual.From)
-              .add(1, "hours")
-              .toISOString()
-              .slice(0, -1) + "+0100", // Shit
-          From:
-            moment(this.actual.From)
-              .add(1, "hours")
-              .toISOString()
-              .slice(0, -1) + "+0100", // Shit
-          Until:
-            moment(this.actual.Until)
-              .add(1, "hours")
-              .toISOString()
-              .slice(0, -1) + "+0100", // Shit
+          Date: moment(this.actual.From)
+            .add(2, "hours") // TODO
+            .toISOString()
+            .slice(0, 10),
+          From: moment(this.actual.From)
+            .add(2, "hours") // TODO
+            .toISOString()
+            .slice(0, -1), // TODO
+          Until: moment(this.actual.Until)
+            .add(2, "hours") // TODO
+            .toISOString()
+            .slice(0, -1), // TODO
           JobCode: {
-            JobCodeId: this.actual.JobCode.Id
+            JobCodeId: this.actual.JobCode.Id,
           },
           Locked: false,
           Log: this.actual.Log,
           Person: {
-            Id: this.$user.Id
+            Id: this.$user.Id,
           },
           Project: {
-            ProjectId: this.actual.Project.ProjectId
+            ProjectId: this.actual.Project.ProjectId,
           },
           PublicTransport: false,
           SocAb: false,
-          TotalHour: this.actual.TotalHour
+          TotalHour: this.actual.TotalHour,
         })
         .then(() => {
           this.getActuals();
@@ -470,11 +446,9 @@ export default {
       if (!this.$user || !this.$user.Id || !actual) return;
 
       if (confirm(this.$user.Name.split(" ").pop() + ", are you sure?")) {
-        this.$axios
-          .delete(process.env.VUE_APP_API + "/actual/Delete/" + actual.Id)
-          .then(() => {
-            this.getActuals();
-          });
+        this.$axios.delete(process.env.VUE_APP_API + "/actual/Delete/" + actual.Id).then(() => {
+          this.getActuals();
+        });
       }
     },
     getBalance() {
@@ -486,9 +460,9 @@ export default {
 
       this.$axios
         .post(process.env.VUE_APP_API + "/actual/GetRecupInfo", {
-          id: this.$user.Id
+          id: this.$user.Id,
         })
-        .then(response => {
+        .then((response) => {
           // Stop loading
           this.loadingBalance = false;
 
@@ -502,15 +476,14 @@ export default {
         return total;
       }
 
-      date.Subgroup.forEach(actual => {
+      date.Subgroup.forEach((actual) => {
         total += actual.TotalHour;
       });
 
       return total;
     },
     nearestPastMinutes(interval, someMoment) {
-      const roundedMinutes =
-        Math.floor(someMoment.minute() / interval) * interval;
+      const roundedMinutes = Math.floor(someMoment.minute() / interval) * interval;
       return someMoment
         .clone()
         .minute(roundedMinutes)
@@ -518,8 +491,7 @@ export default {
         .milliseconds(0);
     },
     nearestMinutes(interval, someMoment) {
-      const roundedMinutes =
-        Math.round(someMoment.clone().minute() / interval) * interval;
+      const roundedMinutes = Math.round(someMoment.clone().minute() / interval) * interval;
       return someMoment
         .clone()
         .minute(roundedMinutes)
@@ -527,8 +499,7 @@ export default {
         .milliseconds(0);
     },
     nearestFutureMinutes(interval, someMoment) {
-      const roundedMinutes =
-        Math.ceil(someMoment.minute() / interval) * interval;
+      const roundedMinutes = Math.ceil(someMoment.minute() / interval) * interval;
       return someMoment
         .clone()
         .minute(roundedMinutes)
@@ -544,8 +515,7 @@ export default {
         this.timeWorkingOn = "";
 
         if (this.nearestMinutes(5, now) > from) {
-          this.timeWorkingOn +=
-            "- " + this.nearestMinutes(5, now).format("HH:mm") + " (";
+          this.timeWorkingOn += "- " + this.nearestMinutes(5, now).format("HH:mm") + " (";
         } else {
           this.timeWorkingOn += "(";
         }
@@ -554,16 +524,12 @@ export default {
         if (now >= from) {
           duration = moment.duration(now.diff(from));
           this.durationWorkingOn = duration;
-          this.timeWorkingOn += moment
-            .utc(duration.asMilliseconds())
-            .format("HH:mm:ss");
+          this.timeWorkingOn += moment.utc(duration.asMilliseconds()).format("HH:mm:ss");
         } else {
           // Past
           duration = moment.duration(from.diff(now));
           this.durationWorkingOn = duration;
-          this.timeWorkingOn += moment
-            .utc(duration.asMilliseconds())
-            .format("-mm:ss");
+          this.timeWorkingOn += moment.utc(duration.asMilliseconds()).format("-mm:ss");
         }
 
         this.timeWorkingOn += ")";
@@ -571,10 +537,23 @@ export default {
         this.timeWorkingOn = null;
       }
     },
+    addNewLogLine() {
+      if (!this.actual) {
+        return;
+      }
+
+      if (this.actual.Log) {
+        this.actual.Log = "- " + this.newLogLine + "\r\n" + this.actual.Log;
+      } else {
+        this.actual.Log = "- " + this.newLogLine;
+      }
+
+      this.newLogLine = null;
+    },
     cleanup() {
       this.durationWorkingOn = null;
       this.timeWorkingOn = null;
-    }
+    },
   },
   watch: {
     projects(value) {
@@ -630,8 +609,8 @@ export default {
             JobCode: { Id: value.id, Description: value.name },
             Project: {
               ProjectId: value.project.id,
-              Project: value.project.name
-            }
+              Project: value.project.name,
+            },
           };
 
           // Update log
@@ -661,12 +640,12 @@ export default {
       handler: function(value) {
         localStorage.setItem("actual", JSON.stringify(value));
       },
-      deep: true
+      deep: true,
     },
     balance(value) {
       localStorage.setItem("balance", JSON.stringify(value));
-    }
+    },
   },
-  name: "Ractuals"
+  name: "Ractuals",
 };
 </script>

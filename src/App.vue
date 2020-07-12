@@ -4,7 +4,7 @@
       <img class="mr-3" src="@/assets/X.svg">
       <v-toolbar-items>
         <v-btn :to="{name: 'Ractuals'}" exact flat>Ractuals</v-btn>
-        <v-btn :to="{name: 'Settings'}" exact flat>Settings</v-btn>
+        <!-- <v-btn :to="{name: 'Settings'}" exact flat>Settings</v-btn> -->
       </v-toolbar-items>
       <v-spacer></v-spacer>
       <span class="mr-4" v-if="user && $vuetify.breakpoint.mdAndUp">Hi {{ firstName }}!</span>
@@ -30,7 +30,7 @@ export default {
   data() {
     return {
       token: localStorage.getItem("token"),
-      user: JSON.parse(localStorage.getItem("user")) || null
+      user: JSON.parse(localStorage.getItem("user")) || null,
     };
   },
   computed: {
@@ -39,7 +39,7 @@ export default {
         return this.user.Name.split(" ").pop() || "";
       }
       return null;
-    }
+    },
   },
   mounted() {
     // Request user based on access token
@@ -59,14 +59,14 @@ export default {
 
       this.$axios
         .get(process.env.VUE_APP_API + "/User/GetUser")
-        .then(response => {
+        .then((response) => {
           this.user = response.data.Data;
         })
         .catch(() => {
           // When error, the token must be incorrect or became invalid
           this.token = null;
         });
-    }
+    },
   },
   watch: {
     token(value) {
@@ -86,7 +86,7 @@ export default {
       localStorage.setItem("token", value);
       // Update in axios
       this.$axios.defaults.headers.common["Authorization"] = "Bearer " + value;
-      
+
       this.getUser();
     },
     user(value) {
@@ -94,8 +94,8 @@ export default {
       localStorage.setItem("user", JSON.stringify(value));
       // Update in window global var
       this.$user = value;
-    }
+    },
   },
-  name: "App"
+  name: "App",
 };
 </script>
