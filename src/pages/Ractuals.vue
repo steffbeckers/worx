@@ -538,7 +538,7 @@ export default {
       }
     },
     addNewLogLine() {
-      if (!this.actual) {
+      if (!this.actual || !this.newLogLine) {
         return;
       }
 
